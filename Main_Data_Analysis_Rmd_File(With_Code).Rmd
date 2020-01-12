@@ -1,0 +1,1223 @@
+---
+title: "Can We Predict Google App Rating?(Linear Regression)"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document: default
+---
+
+
+***
+
+## __Section 1 - Introduction:__
+
+***
+
+</br>
+
+### __Hypothesis Question__ : Can we Predict Google App Rating based on App Reviews and App Total Number of Installs Or Is their any relationship between App Rating,App Reviews and App Total Number of Installs ?
+
+</br>
+
+#### __Description Of Data Set:__
+
+#### Link: https://www.kaggle.com/lava18/google-play-store-apps
+#### Data created by : Lavanya Gupta.
+
+#### Description Of Data:
+
+This dataset includes Gooele Playstore App data.This all apps are those which we usually store into our phone.This information is scraped from the Google Play Store. Purpose behind scrapping data was actionable insights can be drawn for developers to work on and capture the Android market.
+
+#### Structure of Data:
+
+#### Total Number Of Columns : 13
+#### Total Number of Rows : 10841
+
+#### Column Names:
+
+1. App: Name of Application.(charater)
+2. Category: Under Which category Application comes.(Ctegorical)
+-- For Example:
+    + ART_AND_DESIGN
+    + GAME
+    + COMIC
+    + BUSINESS
+    + SPORTS
+    + SOCIAL.. Likewise
+
+3. Rating: out of 5 how many ratings it got(Numeric)
+4. Reviews: Total Number of reviews it got(Numeric)
+5. Size: dowaload size of app in MB(Numeric)
+6. Installs: Total Number of Installations (Numeric) 
+7. Type: Application is Free or Paid(Categorical)
+8. Price: If App is paid than price is stored here(Numeric) 
+9. Content Rating: app content rating given by whom(Categorical)
+-- For Example:
+    + Adults Only 18+
+    + Everyone
+    + Everyone 10+..likewise
+
+10. Genres: Under which genre application comes(Categorical)
+-- For Example:
+    + Action
+    + Adventure
+    + Casio
+    + Beauty.. likewise
+
+11. Last Updated: Datetime on which application was updated.(Date)
+12. Current Ver:	lastet version of application(Character)
+13. Android Ver: Minimum Andriod Version Required for installing App.(Charater)
+
+
+#### Loadind Required Libraries
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(here)
+```
+
+
+### __General Overview of Data__
+
+</br>
+
+#### Reading Dataset
+```{r}
+google_app <- read_csv(here("Data", "googleplaystore.csv"))
+```
+
+#### First Five Records of Dataset
+```{r}
+head(google_app)
+```
+
+#### Shape of Dataset
+```{r}
+dim(google_app)
+```
+
+#### Glimpse of Dataset
+```{r}
+glimpse(google_app)
+```
+
+#### Summary of Dataset
+```{r}
+summary(google_app)
+```
+
+#### Couting Null Values in Each column
+```{r}
+colSums(is.na(google_app))
+```
+</br>
+
+> __END OF SECTION 1__
+
+</br>
+
+***
+
+## __Section 2 - Data analysis plan:__
+
+***
+<br>
+
+### To Prove our hypothesis we will use __Raitng as Response Variable and Reviews, Installs as Explanatory Variables.__ 
+
+</br>
+
+### __(1). Data Cleaning__
+
+</br>
+
+#### Observations: 
+
+* Based upon above overview of our datset we got to know that our main variables which we will use for our main hypothesis analysis have some problems like Rating variable have 1474 Na's value, Installs variable have '+' symbol as well as it is in charater form and Reviews variables is having 1 Na's.
+</br>
+* Apart From our main Analysis variables other varibale are having issues like Size column is having size in MB and KB as well as it is in form of character,Price variable is also in character form and contains '$' symbol and Last updated variable contains date but it is in charater form.
+</br>
+* other variables like current ver,content rating and Android ver is having 1 Na's each.
+
+#### Steps For Cleaning:
+
+* We will remove special symbols like '$' from price,'+',',' from installs,'M' and 'k' from size also will convert all sizes into MB.
+* Rating  and Reviews  variables is having Na's we will impute all those values by mean values of respective columns values.
+* Also will convert Install,Price,size variables into numeric,Last Updated variable into date and Category,Type,Content Rating, Genres into factor as they are categorical variable.
+
+#### Applying Data Cleaning
+```{r}
+
+#Removing Special Symbols from Price and installs 
+google_app$Price <- gsub('[$]', '', google_app$Price)
+google_app$Installs <- gsub("\\+","", as.character(google_app$Installs))
+
+
+#Converting Price and Install into numerical
+google_app$Price <- as.numeric(google_app$Price)
+google_app$Installs <- as.integer(gsub(",", "", google_app$Installs))
+
+
+#Converting Category,Type,Genres into Factor
+google_app$Category <- as.factor(google_app$Category)
+google_app$Type <- as.factor(google_app$Type)
+google_app$`Content Rating` <- as.factor(google_app$`Content Rating`)
+google_app$Genres <- as.factor(google_app$Genres)
+
+#Removing Special Symbols from Size Column and converting all size into MB
+size_in_m <- google_app[grep('M', google_app$Size),]$Size #Removing all M symbol
+size_in_m <- gsub('M', '', size_in_m) # Removing all M symbol
+size_in_m <- as.numeric(size_in_m) #converting to numeric
+
+size_in_k <- google_app[grep('k', google_app$Size),]$Size #Removing all K symbol
+size_in_k <- gsub('k', '', size_in_k) #Removing all K symbol
+size_in_k <- as.numeric(size_in_k)/1024 #converting to numeric as well as from Kilobytes to megabytes.
+
+#creating a new variable and storing all cleanned values into new variable.
+google_app$all_size_in_m = NA
+google_app[grep('k', google_app$Size),]$all_size_in_m <- size_in_k
+google_app[grep('M', google_app$Size),]$all_size_in_m <- size_in_m
+
+#Removing Old Size Variable
+google_app$Size <- NULL 
+
+
+#Converting Laste Updated Column into Date
+google_app$`Last Updated` <- mdy(google_app$`Last Updated`)
+google_app$date <- date(google_app$`Last Updated`)
+
+#Removing  column Last Updated From Dataset
+google_app$`Last Updated` <- NULL
+
+#Imputing Rating and Reviews Na's values with mean
+google_app$Rating[is.na(google_app$Rating)] <- round(mean(google_app$Rating, na.rm = TRUE))
+google_app$Reviews[is.na(google_app$Reviews)] <- round(mean(google_app$Reviews, na.rm = TRUE))
+google_app$Installs[is.na(google_app$Installs)] <- round(mean(google_app$Installs, na.rm = TRUE))
+
+```
+
+#### glimpse View after Data Cleaning
+
+* As we can see all special symbols has been removed from Price,Size and Install column and converted into numeric.</br>
+* Category,Type,Content Ratingand Genres column has been converted to factor.</br>
+* All size are now in one measure in MB.</br>
+* Last updated Column has now converted into Date.</br>
+* Rating, Reviews and Installs null values are imputed with mean.</br>
+
+```{r}
+glimpse(google_app)
+```
+
+#### Number of Null Values in all varibales
+
+* Here as we can see our main analysis variables are not having Na values.
+* other Columns are having few Na values but we can ignore that as we are not going to use it for Main analysis.
+
+```{r}
+colSums(is.na(google_app))
+```
+</br>
+
+### __(2). Simple Data Exploration By visualizing__
+</br>
+
+```{r}
+ggplot(google_app,aes(y=Rating))+
+  geom_boxplot()+
+  ggtitle("BoxPlot of App Rating")+
+  ylab("Rating")
+```
+
+--- From Boxplot we can see most of App Rating is between number 3 to 5.
+
+</br>
+```{r}
+options(scipen=999)
+ggplot(google_app,aes(x=Category,y=Installs)) +
+  geom_bar(stat = "identity",width = 0.7,fill="skyblue")+
+  coord_flip()+
+  ggtitle("Total installs Of Each App Category")+
+  xlab("Category Name")+
+  ylab("Total Number of Installs")
+
+```
+
+--- We can see Out of all App category highest Game Category app is installed after that Communication Category app is highest number of time installed.
+
+</br>
+
+```{r}
+ggplot(google_app,aes(x=Category,y=Reviews)) +
+  geom_bar(stat = "identity",width = 0.7,fill="indianred")+
+  coord_flip()+
+  ggtitle("Total Reviews Of Each App Category")+
+  xlab("Category Name")+
+  ylab("Total Number of Reviews")
+```
+
+--- We can see Out of all App category Game Category app is having highest number of reviews  after that Communication Category app is highest number of Reviews.
+
+</br>
+
+```{r}
+ ggplot(google_app,aes(x=Type,fill=Type)) +
+  geom_bar()+
+  ggtitle("Count of Each Type of App")+
+  xlab("Type of App")+
+  ylab("Count")
+```
+
+--- We can see here most of App are free very less app are paid.
+</br>
+
+```{r}
+ggplot(google_app,aes(x=Price))+
+  geom_histogram(binwidth = 30,fill="orange")+
+  ggtitle("Histogram of App Price")
+```
+
+--- We can see most of App are having 0 dollar price which is true because most of App are free and those who are padi are mostly having price within 40 dollar.
+
+</br>
+```{r}
+google_app %>% filter(Category == "GAME") %>% 
+ggplot(aes(x=Genres))+
+geom_bar(fill = "DarkGreen")+
+ggtitle("Total Count of Genres in Game Category")+
+xlab("Type of Genres")+
+ylab("Count")+
+coord_flip()
+```
+
+--- From Game Category App most of them are Action Genres Type of App.
+
+</br>
+```{r}
+ggplot(google_app,aes(x=`Content Rating`,fill = `Content Rating`))+
+  geom_bar()+
+  xlab("Type of User gave content Rating")+
+  ylab("Total Count")+
+  ggtitle("Total Count of Each Content Rating Given by Type Of User")
+```
+
+--- Out of all type of User Most of Contetn Rating is given by Everyone.
+</br>
+
+### __(3). Exploratory data analysis__
+</br>
+
+* My Hypothesis is to predict App Rating which is my response variable based upon App Reviews and App total number of Installs which are my Explanatory variables.
+* For doing exploratory data analysis we are going to explore our reponse variable App rating and both explanatory variable App reviews,App installs by applying Univariate analysis and Bivariate analysis.
+
+
+#### Brief Description Of EDA variables
+
++ Rating : It is numeric value ranges from 1 to 5.This rating is given by user to particular app 1 is minimum rating and 5 is maximum rating.
++ Reviews : It is numeric value which is about  total number of reviews given to App.
++ Installs: It is numeric value which is about total number of Installs of each App.
+</br>
+
+#### Storing Explanatory and Response into one variable.
+
+```{r}
+google_eda <- google_app %>% select(Rating,Reviews,Installs)
+```
+
+#### Glimpse of Data
+
+```{r}
+glimpse(google_eda)
+```
+
+#### Summary of Data
+
+```{r}
+summary(google_eda)
+```
+
+#### Checking Null Values
+
+```{r}
+colSums(is.na(google_eda))
+```
+</br>
+
+### __Univariate Analysis of Rating(Response Variable)__
+
+</br>
+
+#### Visualizing Distribution of Rating
+
+```{r}
+ggplot(google_eda,aes(x=Rating))+
+  geom_histogram(fill="navy blue",col="black")+
+  ggtitle("Histogram Distribution of Rating")+
+  xlab("Rating")
+```
+
+--- From above graph we can see most of rating is between 3 to 5.
+--- Here we have not passed binwidth first we will pass different binwidth to check any changes in plot than we will calculate best binwidth based upon their range.
+</br>
+
+#### Applying Different Binwidth
+```{r}
+ggplot(google_eda,aes(x=Rating))+
+  geom_histogram(fill="navy blue",col="black",binwidth = 1)+
+  ggtitle("Histogram Distribution of Rating")+
+  xlab("Rating")
+```
+
+```{r}
+ggplot(google_eda,aes(x=Rating))+
+  geom_histogram(fill="navy blue",col="black",binwidth = 1.5)+
+  ggtitle("Histogram Distribution of Rating")+
+  xlab("Rating")
+```
+
+
+#### Calculating binwidth
+
+
+```{r}
+print(max(google_eda$Rating))
+```
+
+```{r}
+print(min(google_eda$Rating))
+```
+
+```{r}
+rating_range <- max(google_eda$Rating) - min(google_eda$Rating)
+rating_range <- rating_range / 30
+rating_range
+```
+
+#### plotting with Calculated binwidth
+
+```{r}
+ggplot(google_eda,aes(x=Rating))+
+  geom_histogram(fill="navy blue",col="black",binwidth = 0.6)+
+  ggtitle("Histogram Distribution of Rating")+
+  xlab("Rating")
+```
+
+
+--- Even after calculating binwidth graph shows us Rating beyond 5 which suggest that there is an outlier in our dataset we should remove that than try to plot histogram it should give use proper result.
+</br>
+
+#### Checking Outlier
+
+```{r}
+google_eda %>% filter(Rating > 5)
+```
+
+--- We found one value greater than 5 which is outlier because we know that Rating can not be greater than 5.We should remove this value.
+</br>
+
+#### Removing Outlier
+
+```{r}
+google_eda <- google_eda[google_eda$Rating!= 19,]
+```
+
+#### Ploting Rating After Removal of Outlier
+
+```{r}
+ggplot(google_eda,aes(x=Rating))+
+  geom_histogram(fill="navy blue",col="black")+
+  ggtitle("Histogram Distribution of Rating After Removing Outlier")+
+  xlab("Rating") 
+```
+
+
+```{r}
+ggplot(google_eda,aes(x=Rating))+
+  geom_density(fill="navy blue",col="black")+
+  ggtitle("Density Plot of Rating Distribution After Removing Outlier")+
+  xlab("Rating")
+```
+
+--- After Removing Outlier we can see most of Rating are between 4-5.
+</br>
+
+#### Checking For Transformation Need
+
+* Transformation is generally applied to Normalize our data but our Rating variable is already skewed because we have removed outliers from it even from log10 and sqrt plot we can see that their is no need for transformation of Rating Variable.
+
+```{r}
+ggplot(google_eda,aes(x=Rating + 1))+
+  geom_histogram(fill="navy blue",col="black",binwidth = 0.4)+
+  ggtitle("Histogram Distribution of Rating After Removing Outlier")+
+  xlab("Rating")+
+  scale_x_log10()
+
+ggplot(google_eda,aes(x=Rating + 1))+
+  geom_histogram(fill="navy blue",col="black",binwidth = 0.4)+
+  ggtitle("Histogram Distribution of Rating After Removing Outlier")+
+  xlab("Rating")+
+  scale_x_sqrt()
+```
+
+#### Finding Skewness and Modality of Rating
+
+```{r}
+summary(google_eda$Rating)
+```
+
+* Since our most of Rating data is on left side of distribution and our medain is greater than mean we can say that it is left skewed and modality of distribution is bimodal.
+</br>
+
+#### Finding Measure of Spread and Meausre of Central Tendency
+
+* As we have seen before our data is highly skewed in that case it is always better to choose __median__ as measure of central tendency beacause it helps us to find center of data.
+* Here Median is greater than mean which prooves skewness in our dataset as well as we can detect any outlier's our dataset using medain.Median is also most robust measure to outliers.
+* In case of measure of spread __IQR__ is always best when our data is skewed.It is robust as well and it always help us to find percentage of observations that  comes under specific  distances from mean. 
+
+```{r}
+ggplot(google_eda,aes(x = Rating)) +
+   geom_histogram(fill="navy blue",col="black",binwidth =0.4)+
+   geom_vline(aes(xintercept = mean(google_eda$Rating)), color = "red", linetype = "solid", size = 1) +
+   geom_vline(aes(xintercept = median(google_eda$Rating)), color = "Green", linetype = "solid", size = 1) +
+   ggtitle("Histogram Distribution of Rating")+
+  xlab("Rating")
+```
+
+```{r}
+IQR(google_eda$Rating)
+```
+</br>
+
+### __Univariate Analysis of Reviews(Explanatory Variable)__
+
+</br>
+
+#### Visualizing Distribution of Reviews
+
+```{r}
+ggplot(google_eda,aes(x=Reviews))+
+  geom_histogram(fill="seagreen",col="black")+
+  ggtitle("Histogram Distribution of Reviews")+
+  xlab("Reviews") 
+```
+
+--- From histogram we can see that most of App reviews are under 20000000.
+</br>
+
+#### Calculating binwidth
+
+```{r}
+Reviews_range <- max(google_eda$Reviews) - min(google_eda$Reviews)
+Reviews_range <- Reviews_range / 30
+Reviews_range
+```
+
+#### Applying Calculated binwidth to Histogram
+
+```{r}
+ggplot(google_eda,aes(x=Reviews))+
+  geom_histogram(fill="seagreen",col="black",binwidth = 2605277)+
+  ggtitle("Histogram Distribution of Reviews")+
+  xlab("Reviews")
+```
+
+
+--- After applying calculated binwidth we can see some data points which was not visible in normal histogram.
+
+#### Checking For Outlier 
+
+* From histogram we can see some points after 6,000,000 can be considered as outliers but in our dataset few of App is having Reviews more 2,000,000 such as like Facebook, Instagram, PUBG Mobile, Candy Crush,Clash of Clanes so by considering values beyond 6,000,000 as outliers is bias.We should keep all values which help up us to understad our data more betterly. 
+
+* Even we find one pattern that those App who have higher number of Reviews is having Higher number of Installs so this also suggests that their is not outlier in our Reviews variable. 
+
+```{r}
+google_eda %>% filter(Reviews > 6000000)
+```
+
+
+#### Checking For Transformation Need
+
+* Transformation is generally applied to Normalize our data but our Reviews variable is already skewed and there is no outliers in it even from log10 and sqrt plot we can see that their is no need for transformation of Reviews Variable.
+
+```{r}
+ggplot(google_eda,aes(x=Reviews+ 1))+
+  geom_histogram(fill="seagreen",col="black")+
+  ggtitle("Histogram Distribution of Reviews")+
+  xlab("Reviews")+
+  scale_x_log10()
+
+ggplot(google_eda,aes(x=Reviews+ 1))+
+  geom_histogram(fill="seagreen",col="black")+
+  ggtitle("Histogram Distribution of Reviews")+
+  xlab("Reviews")+
+ scale_x_sqrt()
+
+```
+
+
+#### Finding Skewness and Modality of Rating
+
+* Since our most of Rating data is on Right side of distribution and our mean is greater than median we can say that it is Right skewed and modality of distribution is unimodal.
+</br>
+
+```{r}
+summary(google_eda$Reviews)
+```
+
+
+```{r}
+ggplot(google_eda,aes(x=Reviews))+
+  geom_density(fill="seagreen",col="black")+
+  ggtitle("Density Distribution of Reviews")+
+  xlab("Reviews")
+
+```
+
+#### Finding Measure of Spread and Meausre of Central Tendency
+
+* As  our data is highly skewed in that case it is always better to choose __median__ as measure of central tendency beacause it helps us to find center of data.
+* Here Mean is greater than Median which prooves skewness in our dataset as well as we can detect any outlier's our dataset using medain.Median is also most robust measure to outliers.
+* In case of measure of spread __IQR__ is always best when our data is skewed.It is robust as well and it always help us to find percentage of observations that  comes under specific  distances from mean. 
+
+```{r}
+ggplot(google_eda,aes(x = Reviews)) +
+   geom_histogram(fill="seagreen",col="black",binwidth =2605277)+
+   geom_vline(aes(xintercept = mean(google_eda$Reviews)), color = "red", linetype = "solid", size = 1) +
+   geom_vline(aes(xintercept = median(google_eda$Reviews)), color = "Blue", linetype = "solid", size = 1) +
+   ggtitle("Histogram Distribution of Reviews")+
+  xlab("Reviews")
+```
+
+```{r}
+IQR(google_eda$Reviews)
+```
+
+### __Univariate Analysis of Installs(Explanatory Variable)__
+
+</br>
+
+#### Visualizing Distribution of Installs
+
+```{r}
+ggplot(google_eda,aes(x=Installs))+
+  geom_histogram(fill="yellow",col="black")+
+  ggtitle("Histogram Distribution of Installs")+
+  xlab("Installs")
+```
+
+--- From histogram we can see that most of App Total Number of Installs are under 125,000,0000.
+</br>
+
+#### Calculating binwidth
+
+```{r}
+Install_range <- max(google_eda$Installs) - min(google_eda$Installs)
+Install_range <- Install_range / 30
+Install_range
+```
+
+#### Applying Calculated binwidth to Histogram
+
+```{r}
+ggplot(google_eda,aes(x=Installs))+
+  geom_histogram(fill="yellow",col="black",binwidth = 33333333)+
+  ggtitle("Histogram Distribution of Installs")+
+  xlab("Installs")
+```
+
+
+--- After applying Calculated binwidth their is not much change in our histogram.
+</br>
+
+#### Checking For Outlier 
+
+* From histogram we can see that values beyond 125,000,0000 could be outliers but that having total number of installs greater than that is might or mistake or error.
+* On other when we cross check our self we found that Large famous App such as like Facebook, Google, Gmail, Google news, whatsapp, Google chrome, Instagram, Google+ this apps are having total number of installs in billions which is true because this apps are used by most of people around world.
+* This highly Installed App are also having High number of Reviews.
+* So according to that we should not remove those values from our dataset.
+
+```{r}
+google_eda %>% filter(Installs >= 1000000000)
+```
+
+#### Checking For Transformation Need
+
+* Transformation is generally applied to Normalize our data but our Installs variable is already skewed and there is no outliers in it even from log10 and sqrt plot we can see that their is no need for transformation of Reviews Variable.
+
+```{r}
+ggplot(google_eda,aes(x=Installs +1))+
+  geom_histogram(fill="yellow",col="black")+
+  ggtitle("Histogram Distribution of Installs")+
+  xlab("Installs")+
+  scale_x_log10()
+
+ggplot(google_eda,aes(x=Installs+1))+
+  geom_histogram(fill="yellow",col="black")+
+  ggtitle("Histogram Distribution of Installs")+
+  xlab("Installs") +
+  scale_x_sqrt()
+  
+```
+
+#### Finding Skewness and Modality of Installs
+
+* Since our most of Installs data is on Right side of distribution and our mean is greater than median we can say that it is Right skewed and modality of distribution is unimodal.
+</br>
+
+```{r}
+summary(google_eda$Installs)
+```
+
+```{r}
+ggplot(google_eda,aes(x=Installs))+
+  geom_density(fill="yellow",col="black")+
+  ggtitle("Density Distribution of Installs")+
+  xlab("Installs")
+
+```
+
+#### Finding Measure of Spread and Meausre of Central Tendency
+
+* As  our data is highly skewed in that case it is always better to choose __median__ as measure of central tendency beacause it helps us to find center of data.
+* Here Mean is greater than Median which prooves skewness in our dataset as well as we can detect any outlier's our dataset using medain.Median is also most robust measure to outliers.
+* In case of measure of spread __IQR__ is always best when our data is skewed.It is robust as well and it always help us to find percentage of observations that  comes under specific  distances from mean.
+
+```{r}
+ggplot(google_eda,aes(x = Installs)) +
+   geom_histogram(fill="Yellow",col="black",binwidth =33333333)+
+   geom_vline(aes(xintercept = mean(google_eda$Installs)), color = "red", linetype = "solid", size = 1) +
+   geom_vline(aes(xintercept = median(google_eda$Installs)), color = "DarkGreen", linetype = "solid", size = 1) +
+   ggtitle("Histogram Distribution of Installs")+
+  xlab("Installs")
+```
+
+```{r}
+IQR(google_eda$Installs)
+```
+</br>
+
+### __Bivariate Analysis of Rating(Response Variable) and Reviews(Explanatory Variable)__
+
+</br>
+
+#### Creating a Plot to Visualize Relationship
+
+```{r}
+ggplot(google_eda,aes(x=Reviews,y=Rating)) +
+  geom_point(shape = 7,alpha = 0.3,col="maroon")+
+  geom_smooth(method = 'lm',se = FALSE)+
+  xlab("Total Number of Reviews") +
+  ylab("Rating")+
+  ggtitle("Relationship between Rating and Reviews")
+```
+
+#### Finding Direction,Strength and Form of Relationship
+
+* From scatter plot we can say that it is linear relationship and from direction of line we can say that it is positive relationship.From Correlation we can say strength of relationship is weak or no relationship.
+
+```{r}
+cor(google_eda$Rating,google_eda$Reviews)
+```
+
+#### Finding Relationship In Context of Data
+
+* In context of Data we know that in general if App has high number of reviews than it should have high rating.
+
+* From above graph we can see relationship is type of confusing App which are having less number of Reviews and App which high Number of Reviews both have same Range of Rating.
+
+#### Finding Variability
+
+* we found that their is weak relationship or no relationship between Rating and Reviews variability is not  constant becasue there App which are having Reviews less than 20000000 still they are having higher rating and those App who have > 20000000 Reviews are also having higher Rating.
+
+</br>
+
+### __Bivariate Analysis of Rating(Response Variable) and Installs(Explanatory Variable)__
+
+</br>
+
+#### Creating a Plot to Visualize Relationship
+
+```{r}
+ggplot(google_eda,aes(x=Installs,y=Rating)) +
+  geom_point(shape = 3,alpha = 0.3,col="Darkblue")+
+  geom_smooth(method = 'lm',se = FALSE)+
+  xlab("Total Number of Installs") +
+  ylab("Rating")+
+  ggtitle("Relationship between Rating and Installs")
+```
+
+#### Finding Direction,Strength and Form of Relationship
+
+* From scatter plot we can say that it is linear relationship and from direction of line we can say that it is positive relationship.From Correlation we can say strength of relationship is weak or no relation.
+
+```{r}
+cor(google_eda$Rating,google_eda$Installs)
+```
+
+#### Finding Relationship In Context of Data
+
+* According Our Dataset we know App which are having high number of Installs it is having higher App rating but from scatter plot above we can not find that strongly.
+* It is confusing because some App have Higher Numer of Installs and some have smaller number of installs still both type of App are having High range of Rating.
+
+
+#### Finding Variability
+
+* From Correlation value we found their is weak relationship or no relationship between App rating and Installs, constantness is also bad across all data.
+* When we talk about high App rating which is above 4 than there are both types of Apps inclded those whom have Higher number of Installs as well as smaller number of installs which does not define variability in our data.
+
+</br>
+
+### __(4). Data Modeling__
+
+</br>
+
+#### Uderstanding Hypothesis
+
+* Our Main Hypothesis is to predict App rating based upon App Reviews and App total number of Installs OR is their any relation between Rating,Reviews and Installs variables.
+* Here our Response variable is App Rating and Explanatory variables are Reviews,Installs.
+* We will create two model one for Predicting Rating using Reviews and second for predicting Rating using Installs.
+* By creating model our main goal to achieve that by inputing values of Reviews and Installs we should be abel to predict what will be App rating.
+* In order to do modeling we wiil use linear model to predict as well as plot best fitting line.
+</br>
+
+#### __Model 1: Rating and Reviews__
+
+</br>
+
+#### Visualizing Relationship
+
+* Here we would use Scatter plot to display relationship between Rating and another numerical variable.
+* Rating is our Response variable we will put it on Y-axis and Reviews is our explanatory variable we will put it on X-axis.
+
+```{r}
+google_modeling <-  google_eda
+
+ggplot(google_modeling,aes(x=Reviews,y=Rating))+
+  geom_point()+
+  xlab("Total Number of App Reviews")+
+  ylab("App Raitng") +
+  ggtitle("Relationship Between App Rating and App Reviews")
+```
+
+
+#### Finding Relationship
+
+* From above we can see that relationship is moderately linear.
+* We can use linear model to predict value of Rating using Reviews.
+
+```{r}
+cor(google_modeling$Rating,google_modeling$Reviews)
+```
+
+#### Checking Strength,Direction,Form 
+
+* strength of relation is very weak or no relation and it is positive relation with correlation value of 0.07556965.
+* there are some observations in our relationship is that most of rating is between 4 to 5 so most of data points are between this two rating.
+
+#### Creating linear Model
+
+* linear regression is machine learning technique which is used to predict numeric value based upon another numeric value using best fitting line.
+* In order to predict value using best fit line it uses function Y = b0 + b1x, here Y is our predicted value,b0 is y-intercepting value, b1 is our slope value and x is our explanatory variable.
+* By putting value of Explanatory varibale into this function we can predict value for Y which is response variable.
+
+```{r}
+model1  <- lm(Rating ~ Reviews,data=google_modeling) 
+model1
+
+```
+
+```{r}
+summary(model1)
+```
+
+* Lm model it gives us our intercept and Slope values which are two elements of best fit line for predicting response variable.
+* summary function gives us summary regarding our model it gives us five number summary for our model, coefficients which gives us our Estimated Slope and intercept.
+* Based upon above we can create our least squares regression line which in this case it would be __rating = 4.1601 + 0.000000012477 * Reviews__ .
+* The value of R square represents the proportion of variability in the response variable that is explained by the explanatory variable. For this model, 0.57% of the variability in Rating is explained by Reviews which is too less or like nothing.
+
+#### Fitting Best line on plot
+
+* By plotting our best fit line on plot we can see difference between Actual value and best fit line.We can plot our best fit line using geom_abline() function.
+* Now using this best fit line we can predict y for any value x which is predict Rating for any value of Reviews.
+
+```{r}
+ggplot(google_modeling,aes(x=Reviews,y=Rating))+
+  geom_point(alpha =0.3,col="indianred") +
+  geom_abline(slope =0.000000012477, intercept = 4.16014089403,col="darkblue")+
+  xlab("Total Number of App Reviews")+
+  ylab("App Raitng") +
+  ggtitle("Scatter plot with Best Fit Line")
+```
+
+#### Predicting Value of Rating
+
+* If we use this best fit line function for predicting Rating by using any random value of Reviews or if any google App developer wants to predict of his developed App Rating by inputing value of App total number of Reviews.
+* lets say for example if we take 100,000 Reviews than what would be App Rating.
+
+```{r}
+a <- 4.16014089403 + (0.000000012477 * 100000)
+a
+```
+
+* Here we can see that for 1,000,000 Reviews our best fit line predicting Rating of 4.17.
+* To check our predicted value is overestimated or underestimated we need to calculate residual value also need to check this prediction with our acutal data.
+
+```{r}
+google_modeling %>%  filter(between(Reviews,99999,100111))
+```
+
+* Closest Value to in our actual data corresponds to Reviews = 100082 so we will use this value to calculate the residual.
+* Residual Value is difference between Actual value and predicted value. 
+</br>
+
+__When our Total Reviews are 100,000 than our model predicted value of Rating is 4.16.__
+
+</br>
+
+__But in Our Data Set when Total Reviews are 100,082 than Actual Value of Rating is 4.9.__
+
+</br>
+
+#### Calculating Residual
+
+__We got Positive value of our Residual that means the value predicted by our model is an underestimate.__ 
+
+```{r}
+model_residual <- 4.9 - 4.1
+model_residual
+```
+</br>
+
+#### __Diagnosis of Model 1__
+
+* To check weather our created linear model is reliable or not there are three ways through which we can check.
+
+  + Checking Linearity.
+  + Checking Normality in Residuals.
+  + Checking Constant Variability.
+</br>
+
+#### Checking Linearity
+
+* As ploted above scater plot from that we can find there is  very weak positive linear relationship between Rating and Reviews.
+
+* Here we will use Broom package which help us to calculate all residual values from our linear model which we created above using lm() function.
+
+```{r}
+summary(model1)
+```
+
+```{r}
+library(broom)
+
+model1_residuals<- augment(model1) %>% 
+            select(Rating, Reviews, predicted = .fitted, residuals = .resid)
+model1_residuals
+```
+
+```{r}
+ggplot(model1_residuals, aes(x = Reviews, y = residuals)) +
+  geom_point() + 
+  geom_hline(yintercept = 0)+
+  xlab("Total Number of App Reviews")+
+  ylab("Residuals") +
+  ggtitle("Relationship Between Residuals and App Reviews")
+```
+
+* From Above plot we can see that their unique pattern that most of Residuals are between -1 to 1 which also prooves weak linear or no relationship between Rating and Reviews, So first condition "linearity" is not met.
+</br>
+
+#### Checking Normal Residuals
+
+* Based on Graph of Histogram we can see our Residuals are not normally distributed So our Second condtion is not met.
+
+```{r}
+ggplot(model1_residuals, aes(x = residuals)) + 
+  geom_histogram(fill = 'orange', colour = 'black',binwidth = 0.1)+
+  xlab("Residuals")+
+  ggtitle("Histogram Distribution Of Residual")
+```
+
+#### Checking Constant Variability
+
+* Below Scatter plot suggest us that Most of our residual points are between two horizontal red lines but it is very close to 0 and their is no constant increase or decrease which tells us that there is not constant variability in our data.
+* So our third condition for model diagnosis is not met.
+
+```{r}
+ggplot(model1_residuals, aes(x = Reviews, y = residuals)) +
+  geom_point() + 
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = 3, colour = 'red') +
+  geom_hline(yintercept = -3, colour = 'red') +
+  xlab("Total Number of Reviews")+
+  ylab("Residual")+
+  ggtitle("Variability Between Residual and Reviews")
+```
+
+</br>
+
+#### __Model 2: Rating and Installs__
+
+#### Visualizing Relationship
+
+* Here we would use Scatter plot to display relationship between Rating and another numerical variable.
+* Rating is our Response variable we will put it on Y-axis and Installs is our explanatory variable we will put it on X-axis.
+
+```{r}
+ggplot(google_modeling,aes(x=Installs,y=Rating))+
+  geom_point()+
+  xlab("Total Number of App Installs")+
+  ylab("App Raitng") +
+  ggtitle("Relationship Between App Rating and App Installs")
+```
+
+#### Finding Relationship
+
+* From above we can see that relationship is moderately linear.
+* We can use linear model to predict value of Rating using Reviews.
+
+```{r}
+cor(google_modeling$Rating,google_modeling$Installs)
+```
+
+#### Checking Strength,Direction,Form 
+
+* strength of relation is very weak or no relation and it is positive relation with correlation value of 0.06055361.
+* there are some observations in our relationship is that most of rating is between 4 to 5 so most of data points are between this two rating.
+
+#### Creating linear Model
+
+```{r}
+model2  <- lm(Rating ~ Installs,data=google_modeling) 
+model2
+
+```
+
+```{r}
+summary(model2)
+```
+
+* Lm model it gives us our intercept and Slope values which are two elements of best fit line for predicting response variable.
+* summary function gives us summary regarding our model it gives us five number summary for our model, coefficients which gives us our Estimated Slope and intercept.
+* Based upon above we can create our least squares regression line which in this case it would be __rating = 4.1603 + 0.00000000034425 * Installs__ .
+* The value of R square represents the proportion of variability in the response variable that is explained by the explanatory variable. For this model, 0.37% of the variability in Rating is explained by Installs which is too less or like nothing.
+
+#### Fitting Best line on plot
+
+* By plotting our best fit line on plot we can see difference between Actual value and best fit line.We can plot our best fit line using geom_abline() function.
+* Now using this best fit line we can predict y for any value x which is predict Rating for any value of Installs.
+
+```{r}
+ggplot(google_modeling,aes(x=Installs,y=Rating))+
+  geom_point(alpha =0.3,col="magenta") +
+  geom_abline(slope =0.00000000034425, intercept = 4.16035904866520,col="Navyblue")+
+  xlab("Total Number of App Installs")+
+  ylab("App Raitng") +
+  ggtitle("Scatter plot with Best Fit Line")
+```
+
+#### Predicting Value of Rating
+
+* If we use this best fit line function for predicting Rating by using any random value of Installs or if any google App developer wants to predict of his developed App Rating by inputing value of App total number of Installs.
+* lets say for example if we take 1,000,000,000 Installs than what would be App Rating.
+
+```{r}
+b <- 4.16035904866520 + (0.00000000034425 * 1000000000)
+b
+```
+
+* Here we can see that for 125,000,000 Installs our best fit line predicting Rating of 4.50.
+* To check weather our predicted value is overestimated or underestimated we need to calculate residual value also need to check this prediction with our acutal data.
+
+```{r}
+google_modeling %>%  filter(between(Installs,999999999,1000000001)) 
+google_modeling %>%  filter(between(Installs,999999999,1000000001)) %>% summarise(mean(Rating))
+```
+
+* In our Actual Data there are 58 App which are having Installs of 1,000,000,000 so in that case we will take mean value from them and take that value for counting residual.
+* Residual Value is difference between Actual value and predicted value. 
+</br>
+
+__When our Total Installs are 1,000,000,000 than our model predicted value of Rating is 4.50.__
+
+</br>
+
+__But in Our Data Set when Total Install are 1,000,000,000 than Actual Value of Rating is 4.26.__
+
+</br>
+
+#### Calculating Residual
+
+__We got Negative value of our Residual that means the value predicted by our model is an Overestimate__. 
+
+```{r}
+model_residual_2 <- 4.26 - 4.50
+model_residual_2
+```
+
+#### __Diagnosis of Model 2__
+
+* To check weather our created linear model is reliable or not there are three ways through which we can check.
+
+  + Checking Linearity.
+  + Checking Normality in Residuals.
+  + Checking Constant Variability.
+</br>
+
+#### Checking Linearity
+
+* As ploted above scater plot from that we can find there is  very weak positive linear relationship between Rating and Installs
+
+* Here we will use Broom package which help us to calculate all residual values from our linear model which we created above using lm() function.
+
+```{r}
+summary(model2)
+```
+
+```{r}
+library(broom)
+
+model2_residuals<- augment(model2) %>% 
+            select(Rating, Installs, predicted = .fitted, residuals = .resid)
+model2_residuals
+```
+
+```{r}
+ggplot(model2_residuals, aes(x = Installs, y = residuals)) +
+  geom_point() + 
+  geom_hline(yintercept = 0)+
+  xlab("Total Number of App Installs")+
+  ylab("Residuals") +
+  ggtitle("Relationship Between Residuals and App Installs")
+```
+
+* From Above plot we can see that their unique pattern that most of Residuals are between -1 to 1 which also prooves weak linear relationship or no relationship between Rating and Installs, So first condition "linearity" is not met.
+</br>
+
+#### Checking Normal Residuals
+
+* Based on Graph of Histogram we can see our Residuals are not normally distributed So our Second condtion is not met.
+
+```{r}
+ggplot(model2_residuals, aes(x = residuals)) + 
+  geom_histogram(fill = 'yellow', colour = 'black',binwidth =0.2)+
+  xlab("Residuals")+
+  ggtitle("Histogram Distribution Of Residual")
+```
+
+#### Checking Constant Variability
+
+* Below Scatter plot suggest us that Most of our residual points are between two horizontal red lines but it is very close to 0 and their is not constant increase or decrease which tells us that there is not constant variability in our data.
+* So our third condition for model diagnosis is not met.
+
+```{r}
+ggplot(model2_residuals, aes(x = Installs, y = residuals)) +
+  geom_point() + 
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = 3, colour = 'red') +
+  geom_hline(yintercept = -3, colour = 'red') +
+  xlab("Total Number of Installs")+
+  ylab("Residual")+
+  ggtitle("Variability Between Residual and Installs")
+```
+
+</br>
+
+#### Comparing Both Model 
+
+* Model1 __Rating and Reviews__ is having correlation of __0.07556965__ and their R Square value is __0.005711__
+* Model2 __Rating and Installs__ is having correlation of __0.06055361__ and their R Square value is __0.003667.__
+* If we consider above values we can say that model 1 is good than model 2 becasuse it is having better Correlation and R square value.
+* However,Main issue with this model is that it is not reliable because when we tried to check diagnosis of our model it failed to match all three conditions and they are having weak or no correlation so __we can not use this model to predict App Rating.__
+
+</br>
+
+> __END OF SECTION 2__
+
+</br>
+
+***
+
+## __Section 3 - Final analysis report:__
+
+***
+
+* Our Main Hypothesis is  to predict App Rating(Response) Based upon App Reviews(Explanatory) and App Total Number of Installs(Explanatory) Or to Find Relationship Between These Three Variable.Are they have any relationship between them?
+* We started with an assumption in our mind that we can predict App Rationg Using App Reviews and App Total Number of Installs Or there is relationship between this variable.
+* Now in order to check our hypothesis correct or wrong we have gone through sevral Steps which are following:
+
+  + First we tried to get overall knowledge of our Dataset with what each variable stands for and what type of values contains specially with our main hypothesis variables.
+  
+  + After getting knowledge of data we tried to clean our dataset to make it competible for doing analysis.
+
+  + Before Jumping into Exploratory Data Analysis we visualized our data to get more better understanding of dataset.For Example we found that Most of App Rating are between 4 to 5,Out all App Category Game category is having highest numer of Reviews and Installs,Also Most of App are of Free type,In Game Category App Highest Action Genres are of them,Most type of content rating is given by everyone and All Paid App is having Price within 40$.
+
+  + During Our Exploratory Data Analysis we took both Rating(Response) and Reviews(Explanatory), Installs(Explanatory) variable to do univariate Analysis on each of this individually also bivariate analysis between combinations of two.We have found Skewness,outliers and measure of spread,centeral tendency for each of these variable.We also found relationship between this variables.
+
+  + At last We did data modeling by applying Linear model aslo plotted best fitting line to check correctness of our hypothesis.we created two models one for Rating(Response) and Reviews(Explanatory) second for Rating(Response) and Installs(Explanatory).
+
+  + We found slope and intercept values as well as correlation for both model and manually tried to find Residual values based upon Actual and predicted values.We also diagnose our model by checking three conditions Of linearity,normal residuals and constant variability.
+
+  + From result of our model we found that both model failed to pass our hypothesis test because they were having very weak or no correlation value and not matching all three conditions of model diagnosis.
+
+  + From Above all we can say that our hypothesis failed or proved wrong that we can not predict value of App Rating(Response) using App Reviews(Explanatory) and Installs(Explanatory) or there is no relationship between these three variables.
+  + Any Google play store developer use this model to predict his own developed app rating based upon app reviews and app installs he won't be able to predict rating of it.
+
+</br>
+
+> __END OF SECTION 3__
+
+</br>
+
+***
+
+## __Section 4- Conclusion/Summary__
+
+***
+
+</br>
+
+#### In our project we used Google Play store dataset from which we created our research question to predict App Rating using App Reviews and App Installs.In order to find our research anlaysis we analyzed and processed our data.After handling our data we used various statistical techniques like Univariate,Bivariate Analysis of Response and explanatory variable.For doing prediction we used linear model method which helped to generate a best fit line equation through that we can predict Rating of App for any given App Reviews and App installs.Residuals helped to understand constant variability in our model as well as reliability of our model.What we learned from our whole analysis is that variable we choose for doing analysis were not highly correlated to each other becasuse of that our linear model was not able to predict our response variable.As matter of fact dataset we choose was may be wrong instead of taking whole dataset we could have divided into small parts like finding only App Rating which has value above 4 with App Reviews and App installs than it might have predicted well.In case of statistical analysis approach our model of linear model was appropriate for predicting app rating but there were some issues with variables which we choose to apply on the model like Review and Installs variables are having very large values in millions and billions that can not help us to predict rating.
+
+</br>
+
+#### what we would do next if we were going to continue work on the project: There are lots of other things which we can do with this dataset such as like:
+
+  + Here we have taken Installs and Reviews on their actual values which have very large values in millions and billions so instead of taking whole dataset we should either restrict ourself to particular value like upto 1,00,000 Reviews and Installs or divided into various ranges than tried to predict Rating than result could be different.</br> 
+  + We could  find relationship between App Last Updated,Current Android version and App Rating or does Updation of App has relation with App rating.Any play store app developer who keeps updated their app with new patches and features will have good chances of getting App higher rating.</br>
+  + In our dataset there are high number of  Game App that we can take all Game App data than we can do analysis between Free and Paid Game apps based upon we can decide which one is better to download.</br>
+  + We have one Variable Type which says weather a App is Free or paid. we can do classification on this varibale based upon other variables such as Rating,Reviews,Size and installs to correctly classify weather it would be a free or paid App.</br>
+  + We can also find relationship between App size and App Price to find out weather Paid App has large App size or Free App have Large App size or via versa.
+
+</br>
+
+> __END OF SECTION 4__
+
+</br>
+
+  
+
+### References Links:
+
+--- https://www.kaggle.com/asethi129/eda-on-play-store-data-which-games-to-buy. 
+
+--- https://www.kaggle.com/rtrench/practicing-eda/code. 
+
+--- https://discuss.analyticsvidhya.com/t/how-to-count-the-missing-value-in-r/2949. 
+
+--- https://stackoverflow.com/questions/25835643/replace-missing-values-with-column-mean. 
+
+--- https://www.kaggle.com/rtrench/practicing-eda#univariate-analysis 
+
+--- https://www.kaggle.com/geethas/eda-google-rating 
+
+--- https://stackoverflow.com/questions/44089894/identifying-the-outliers-in-a-data-set-in-r/44089981 
+
+--- https://www.r-bloggers.com/make-a-box-plot-with-single-column-data-using-ggplot2-tutorial/ 
+
+--- https://www.r-bloggers.com/outlier-detection-and-treatment-with-r/ 
+
+--- https://medium.com/@ertebablu_7511/google-app-store-rating-prediction-ffa7343cf1be 
+
